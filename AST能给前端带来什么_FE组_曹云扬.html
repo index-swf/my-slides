@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Title</title>
+    <meta charset="utf-8">
+    <style>
+      @import url(https://fonts.googleapis.com/css?family=Yanone+Kaffeesatz);
+      @import url(https://fonts.googleapis.com/css?family=Droid+Serif:400,700,400italic);
+      @import url(https://fonts.googleapis.com/css?family=Ubuntu+Mono:400,700,400italic);
+
+      body { font-family: 'Droid Serif'; }
+      h1, h2, h3 {
+        font-family: 'Yanone Kaffeesatz';
+        font-weight: normal;
+      }
+      .remark-code, .remark-inline-code { font-family: 'Ubuntu Mono'; }
+      .max-width-100 img {
+        max-width: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <textarea id="source">
+
+class: center, middle, inverse
+
+## AST 能给前端带来什么？  
+
+FE 组 曹云扬
+
+???
+
+大家好，我是来自 FE 组的 曹云扬，今天分享的主题是 `AST 能给前端带来什么？`
+
+---
+
+# 概要
+
+- 什么是 AST
+- AST 在前端领域的应用场景
+- 我们在代码查重方面的实践
+
+???
+
+我的分享主要包括3方面内容：
+
+首先是简单介绍一下什么是 AST，然后会讲一些 AST 在前端领域的应用，最后是我们在代码查重方面的一个实践。
+
+---
+
+## 高级语言的编译流程
+
+.max-width-100[![image](https://bizimg.sogoucdn.com/202001/14/14/07/25/koala-paste-upload/1578982045367-image.png)]
+
+???
+
+词法分析 → 语法分析 → 语义分析 → 生成中间代码（IR） → 代码优化 → 生成机器码
+
+ 不妨先考虑这样一个问题：高级语言是如果转换成机器可以执行的二进制代码的？回顾一下编译的流程主要分为以下步骤：词法分析 → 语法分析 → 语义分析 → 生成中间代码（IR） → 代码优化 → 生成机器码。当然，开发一个编译器不是本次的内容。我们说的 AST 是编译过程的一个中间产物。
+
+---
+
+
+```js
+const answer = 42
+```
+
+→ 词法分析
+
+```json
+[
+  { "type": "Keyword", "value": "const" },
+  { "type": "Identifier", "value": "answer" },
+  { "type": "Punctuator", "value": "=" },
+  { "type": "Numeric", "value": "42" }
+]
+```
+
+→ 语法分析
+
+```json
+{
+  type: 'VariableDeclaration',
+  declarations: [
+    {
+      type: 'VariableDeclarator',
+      id: {
+        type: 'Identifier',
+        name: 'answer',
+      },
+      init: {
+        type: 'Literal',
+        value: 42,
+        raw: '42',
+      },
+    },
+  ],
+  kind: 'const',
+}
+```
+
+???
+
+一段代码 首先会被作为一个字符串，进行词法分析，按顺序读取这个字符串，解析出其中的 语言关键字、运算符、符号、字面量，得到 token list。
+
+然后进行语法分析，将 token list 转换为语义化的树状结构数据。 这就是 Abstract Syntax Tree （抽象语法树）。
+
+---
+class: middle, center
+
+# AST （Abstract Syntax Tree）
+
+---
+
+```json
+  "devDependencies": {
+    "@babel/core": "^7.7.7",
+    "@babel/plugin-proposal-class-properties": "^7.7.4",
+    "@babel/plugin-proposal-decorators": "^7.7.4",
+    "@babel/plugin-proposal-export-default-from": "^7.7.4",
+    "@babel/plugin-syntax-dynamic-import": "^7.7.4",
+    "@babel/preset-env": "^7.7.7",
+    "@babel/preset-react": "^7.7.4",
+    "babel-eslint": "^9.0.0",
+    "babel-loader": "^8.0.0",
+    "babel-plugin-import": "^1.6.2",
+    "body-parser": "^1.18.3",
+    ...
+    "eslint": "^5.16.0",
+    "eslint-plugin-react": "^7.13.0",
+    "eslint-plugin-react-hooks": "^1.6.0",
+    ...
+  },
+```
+
+???
+
+那么 AST 有什么用呢？请看看上图，这是一个典型的前端工程的开发依赖列表，可以看到其中大部分库都需要 AST 解析的能力。
+
+---
+
+## AST 技术在前端的应用
+
+- 代码转译
+- 代码压缩
+- 代码静态检测
+- Tree shaking 优化
+- codemod
+- ...
+
+???
+
+AST 技术广泛应用在：
+
+- 代码转译（用来抹平不同浏览器的JS语言差异差异）
+- 代码压缩（用来减小生成代码的体积）
+- 代码静态检测（通过编译时扫码发现代码的潜在问题）
+- Tree shaking 优化（删除库中为用到的方法）
+- codemod（用于框架升级时自动修改 API）
+
+---
+
+### 应用例子1：代码压缩
+
+压缩前：
+
+```js
+util.addNatureMonth = function (date, months) {
+  var year = date.getFullYear();
+  var month = date.getMonth();
+  var day = date.getDate();
+  year += Math.floor((month + months) / 12);
+  month = (month + months) % 12;
+  var days = util.daysInMonth(year, month);
+  if (day > days) {
+    day = days;
+  }
+  return new Date(year, month, day);
+};
+```
+
+压缩后：
+
+```js
+util.addNatureMonth=function(t,a){var e=t.getFullYear(),n=t.getMonth(),
+r=t.getDate();e+=Math.floor((n+a)/12),n=(n+a)%12;
+var o=util.daysInMonth(e,n);return r>o&&(r=o),new Date(e,n,r)};
+```
+
+341 → 183 bytes, saved 46.33%
+
+---
+
+### 应用例子2：代码转译
+
+转换前：
+
+```jsx
+const Todo = () => {
+	return <div type="list">
+      <li>item 1</li>
+      <li>item 2</li>
+    </div>;
+};
+```
+
+转换后：
+
+```js
+"use strict";
+
+var Todo = function Todo() {
+  return React.createElement(
+    "div", {
+      type: "list"
+    },
+    React.createElement("li", null, "item 1"),
+    React.createElement("li", null, "item 2"),
+  );
+};
+```
+
+---
+
+### 应用例子3：静态代码检测
+
+对于 React Hooks API，eslint-plugin-react-hooks 可以实现检查不规范的依赖写法。
+
+.max-width-100[![image](https://bizimg.sogoucdn.com/202001/14/12/02/09/koala-paste-upload/1578974529289-image.png)]
+
+---
+
+### 应用例子4：codemod
+
+```diff
+import PropTypes from 'prop-types';
+import React from 'react';
++import { DownloadOutlined, EditOutlined, EyeOutlined } from '@ant-design/icons';
+import { Spin, Button } from 'antd';
+import styled from 'styled-components';
+
+        </div>
+        <div className="style-operation">
+          <Button.Group>
+-            <Button icon="eye-o" size="small" onClick={this.previewStyle}>预览</Button>
+-            <Button icon="edit" size="small" onClick={this.dataMock}>数据模拟</Button>
+-            <Button icon="download" size="small" onClick={this.downloadTpl}>模板下载</Button>
++            <Button icon={<EyeOutlined />} size="small" onClick={this.previewStyle}>预览</Button>
++            <Button icon={<EditOutlined />} size="small" onClick={this.dataMock}>数据模拟</Button>
++            <Button icon={<DownloadOutlined />} size="small" onClick={this.downloadTpl}>模板下载</Button>
+          </Button.Group>
+        </div>
+        <MockModal ref={node => this.mockModal = node} />
+
+```
+
+???
+
+由此可见，AST 相关的技术，不仅跟语言的编译执行息息相关，也是前端工程化的重要基础设施之一
+
+---
+
+### AST Explorer
+
+https://astexplorer.net/
+
+.max-width-100[![image](https://bizimg.sogoucdn.com/202001/14/11/38/21/koala-paste-upload/1578973101964-image.png)]
+
+???
+
+在这里推荐一个网站 AST explorer，支持多种语言、多种解析器的 在线AST 查看器。还有一个 JavaScript 的 AST 解析库：@babel/parse，感兴趣的同学可以试试
+
+---
+
+<!-- todo: re layout -->
+### AST 实现代码查重
+
+实现思路：
+
+1. 通过 深度优先方式遍历所有树节点。
+2. 为每个节点生成一个 从当前节点起始的，一定长度的，按照遍历顺序的 类型hash
+3. 把 符合条件的 hash 存入表中
+4. 分析表中 hash，最终找出重复代码
+5. 将结果输出为 markdown 报告
+
+.max-width-100[![image](https://bizimg.sogoucdn.com/202001/14/13/27/34/koala-paste-upload/1578979654375-image.png)]
+
+???
+
+实际业务中偶尔会碰到一个功能需求要重复修改多处代码的情况，为了避免这类情况，且能在一定程度上量化代码质量，所以希望能有一个自动扫码项目中的重复代码的工具。但是由于代码的语法较为复杂，并不能简单地通过文本匹配的方式去做代码查重。
+
+由于可以借助 AST 解析工具生成抽象语法树。那上述问题就转换为一个纯算法问题： 如何在多个树状结构数据中 查找重复（相似）部分了。
+
+---
+
+#### 效果如下：
+
+
+  起止行号: 48 - 56
+  代码路径: ./output/workorder-fe/src/containers/CategoryManage/CategoryInfo/index.js
+
+  ```js
+loadTable = (resetPage = true, pageInfo) => {
+  let pageNo;
+  let pageSize;
+  if (!resetPage) {
+    pageNo = pageInfo ? pageInfo.page : this.state.pageNo;
+    pageSize = pageInfo ? pageInfo.pageSize : this.state.pageSize;
+  } else {
+    pageNo = PAGE_DATA.pageNo;
+    pageSize = PAGE_DATA.pageSize;
+  ```
+
+
+  起止行号: 101 - 109
+  代码路径: ./output/workorder-fe/src/containers/CategoryManage/TemplateBindPanel/index.js
+
+  ```js
+loadTable = (resetPage = true, pageInfo) => {
+  let pageNo;
+  let pageSize;
+  if (!resetPage) {
+    pageNo = pageInfo ? pageInfo.page : this.state.pageNo;
+    pageSize = pageInfo ? pageInfo.pageSize : this.state.pageSize;
+  } else {
+    pageNo = PAGE_DATA.pageNo;
+    pageSize = PAGE_DATA.pageSize;
+  ```
+
+...
+
+???
+
+由此我们看到，AST 相关的技术可以让我们实现用代码修改代码，用代码去评估代码，推动了前端工程化的发展，提高了编码质量和效率，给我们提供了更多的可能。
+
+---
+class: center, middle
+
+# 谢谢观看！
+
+???
+
+todo: 代码查重对于我们的意义，以及后续规划
+    </textarea>
+    <script src="https://remarkjs.com/downloads/remark-latest.min.js">
+    </script>
+    <script>
+      var slideshow = remark.create();
+    </script>
+  </body>
+</html>
